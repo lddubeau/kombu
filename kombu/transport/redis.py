@@ -715,7 +715,10 @@ class Channel(virtual.Channel):
         keys = [self._q_for_pri(queue, pri) for pri in self.priority_steps
                 for queue in queues] + [timeout or 0]
         self._in_poll = self.client.connection
-        self.client.connection.send_command('BRPOP', *keys)
+        try:
+            self.client.connection.send_command('BRPOP', *keys)
+        except self.connection_errors:
+            self.client.connection.send_command('BRPOP', *keys)
 
     def _brpop_read(self, **options):
         try:
@@ -930,6 +933,7 @@ class Channel(virtual.Channel):
 
         if asynchronous:
             class Connection(connection_cls):
+
                 def disconnect(self):
                     super(Connection, self).disconnect()
                     channel._on_connection_disconnect(self)
