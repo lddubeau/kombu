@@ -722,23 +722,35 @@ class Channel(virtual.Channel):
 
     def _brpop_read(self, **options):
         try:
-            try:
-                dest__item = self.client.parse_response(self.client.connection,
-                                                        'BRPOP',
-                                                        **options)
-            except self.connection_errors:
-                # if there's a ConnectionError, disconnect so the next
-                # iteration will reconnect automatically.
-                self.client.connection.disconnect()
-                raise
-            if dest__item:
-                dest, item = dest__item
-                dest = bytes_to_str(dest).rsplit(self.sep, 1)[0]
-                self._queue_cycle.rotate(dest)
-                self.connection._deliver(loads(bytes_to_str(item)), dest)
-                return True
-            else:
-                raise Empty()
+            # We have logic here to retry on communication failures.
+            tries = 0
+            done = False
+            while not done:
+                try:
+                    tries += 1
+                    dest__item = \
+                        self.client.parse_response(self.client.connection,
+                                                   'BRPOP',
+                                                   **options)
+                    done = True
+                except self.connection_errors:
+                    # disconnect so the next iteration will reconnect
+                    # automatically.
+                    self.client.connection.disconnect()
+                    self.client.connect()
+                    if tries > 1:
+                        # Tried as much as possible, fail.
+                        raise
+                else:
+                    if dest__item:
+                        dest, item = dest__item
+                        dest = bytes_to_str(dest).rsplit(self.sep, 1)[0]
+                        self._queue_cycle.rotate(dest)
+                        self.connection._deliver(
+                            loads(bytes_to_str(item)), dest)
+                        return True
+                    else:
+                        raise Empty()
         finally:
             self._in_poll = None
 
