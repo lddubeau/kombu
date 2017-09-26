@@ -3,6 +3,7 @@ from __future__ import absolute_import, unicode_literals
 
 import numbers
 import socket
+import errno
 
 from bisect import bisect
 from collections import namedtuple
@@ -727,20 +728,21 @@ class Channel(virtual.Channel):
             done = False
             while not done:
                 try:
-                    tries += 1
-                    dest__item = \
-                        self.client.parse_response(self.client.connection,
-                                                   'BRPOP',
-                                                   **options)
-                    done = True
+                    try:
+                        tries += 1
+                        dest__item = \
+                            self.client.parse_response(self.client.connection,
+                                                       'BRPOP',
+                                                       **options)
+                        done = True
+                    except IOError as ex:
+                        if ex.errno != errno.EINTR:
+                            raise
                 except self.connection_errors:
                     # disconnect so the next iteration will reconnect
                     # automatically.
                     self.client.connection.disconnect()
-                    self.client.connect()
-                    if tries > 1:
-                        # Tried as much as possible, fail.
-                        raise
+                    raise
                 else:
                     if dest__item:
                         dest, item = dest__item
